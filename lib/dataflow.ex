@@ -19,7 +19,7 @@ defmodule Dataflow do
   use Application
   require Logger
 
-  @sdk_version "0.1.0"
+  @sdk_version "0.2.0"
   @key_len 32
   @salt_len 16
   @iterations 10_000
@@ -34,6 +34,10 @@ defmodule Dataflow do
     # start callback already ran once — never spawn a second Pipeline.
     case Process.whereis(Dataflow.Supervisor) do
       nil ->
+        # Report the service manifest once, from the same point the pipeline
+        # starts; best-effort, independent of the tracing pipeline. The
+        # whereis guard keeps it exactly-once across double starts.
+        Dataflow.Manifest.send_manifest()
         Supervisor.start_link([Dataflow.Pipeline], strategy: :one_for_one, name: Dataflow.Supervisor)
 
       _pid ->
