@@ -21,7 +21,7 @@ defmodule Dataflow do
   use Application
   require Logger
 
-  @sdk_version "0.3.0"
+  @sdk_version "0.4.0"
   @key_len 32
   @salt_len 16
   @iterations 10_000

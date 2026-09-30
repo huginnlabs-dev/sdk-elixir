@@ -96,3 +96,34 @@ span:
 Spans join the caller's current trace when one exists (e.g. a Phoenix
 request span), otherwise they open their own. The handler is best-effort:
 it never raises into the query caller.
+
+## Route scanning
+
+`Dataflow.Scan` is a static scanner for CI / release pipelines: it extracts
+the HTTP endpoints a Phoenix or Plug router declares (line/regex based, no
+AST) and posts them to the server's route catalog, so dashboards show every
+declared route before the first trace arrives.
+
+```sh
+mix run -e "Dataflow.Scan.run()"
+```
+
+- Scans `*.ex`/`*.exs` under the current directory (skipping `deps/`,
+  `_build/`, `.git/` and `test/`). Phoenix routers (`use MyAppWeb,
+  :router` or `scope "..."`) contribute `get/post/put/patch/delete/
+  options/trace` routes with their `scope` path prefixes applied (nested
+  scopes concatenate); Plug routers (`use Plug.Router`) contribute
+  `get "/path" do` blocks with an empty handler. The router is the source
+  of truth — controllers are not scanned.
+- Each route becomes `{method, path, handler, source_file}` (handler is
+  `Controller.action` as written in the router), capped at 1000 routes.
+- Base URL: `DATAFLOW_HTTP_URL`, else the URL-form `DATAFLOW_ENDPOINT`
+  (same resolution as the manifest); the API key comes from
+  `DATAFLOW_API_KEY` via `Dataflow.configure/0`. Without either, the run
+  skips.
+- Options: `dir:` (default `"."`), `service:` (default
+  `DATAFLOW_SERVICE_NAME`, then the directory name), `url:` override and
+  `print: true` to print the catalog JSON instead of posting.
+
+Returns `{:ok, route_count}`, `{:error, reason}` or `:skipped`; it never
+raises into the caller.
