@@ -10,16 +10,18 @@ defmodule Dataflow do
   a PBKDF2-derived key (:crypto) that never leaves the node.
 
       Dataflow.configure()
+      Dataflow.attach_ecto()                  # DB_QUERY spans for Ecto repos
       Dataflow.trace("ingest.Validate", fn span ->
         Dataflow.Span.data(span, "event_id", ev.id)
         Dataflow.trace("schema.Check", fn s -> ... end)
       end)
+      Dataflow.HTTP.get(url)                  # HTTP_CLIENT span + trace id header
   """
 
   use Application
   require Logger
 
-  @sdk_version "0.2.0"
+  @sdk_version "0.3.0"
   @key_len 32
   @salt_len 16
   @iterations 10_000
@@ -176,6 +178,19 @@ defmodule Dataflow do
 
   @doc "Clears the process's span context (use at the end of request handling)."
   def clear_context, do: Process.delete(:dataflow_stack)
+
+  # --- optional integrations ---------------------------------------------------
+
+  @doc """
+  Attaches the Ecto query tracer: every `[:<prefix>, :repo, :query]`
+  telemetry event becomes a DB_QUERY span (see `Dataflow.Ecto`). Returns
+  `:ok`, or `{:error, :already_exists}` when the same prefix is already
+  attached.
+  """
+  def attach_ecto(prefix \\ [:dataflow_sample]), do: Dataflow.Ecto.attach(prefix)
+
+  @doc "Detaches the Ecto query tracer installed by `attach_ecto/1`."
+  def detach_ecto(prefix \\ [:dataflow_sample]), do: Dataflow.Ecto.detach(prefix)
 
   defp agent_attrs do
     arch =
