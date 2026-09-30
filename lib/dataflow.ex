@@ -16,12 +16,13 @@ defmodule Dataflow do
         Dataflow.trace("schema.Check", fn s -> ... end)
       end)
       Dataflow.HTTP.get(url)                  # HTTP_CLIENT span + trace id header
+      Dataflow.capture(fn -> risky() end)     # crash → error.stack, then re-raise
   """
 
   use Application
   require Logger
 
-  @sdk_version "0.4.0"
+  @sdk_version "0.5.0"
   @key_len 32
   @salt_len 16
   @iterations 10_000
@@ -178,6 +179,17 @@ defmodule Dataflow do
 
   @doc "Clears the process's span context (use at the end of request handling)."
   def clear_context, do: Process.delete(:dataflow_stack)
+
+  # --- crash capture -----------------------------------------------------------
+
+  @doc """
+  Crash capture with stack traces: wraps a zero-arity function; any
+  raise/throw/exit is recorded on the current span (or a synthetic
+  "exception" span) — status 500, the formatted error, the "error.stack"
+  metadata entry — and propagated unchanged. Plug routers capture crashes
+  with `use Dataflow.PlugCrash`. See `Dataflow.Crash`.
+  """
+  defdelegate capture(fun), to: Dataflow.Crash
 
   # --- optional integrations ---------------------------------------------------
 

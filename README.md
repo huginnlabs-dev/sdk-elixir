@@ -49,6 +49,48 @@ Dataflow.start_server_span(route, incoming_trace_id)
 Dataflow.end_current_span()
 ```
 
+## Crash capture
+
+`Dataflow.Crash.capture/1` wraps any zero-arity function: when the function
+raises, throws or exits, the crash is recorded on the current span — status
+500, the `Exception.format/3` rendering truncated to 500 chars as the error
+message, and the formatted stacktrace (capped at 8192 bytes, from the top)
+as the `error.stack` metadata entry. The crash is never swallowed: it
+propagates exactly as it would without the SDK (re-raised with its original
+stacktrace).
+
+```elixir
+Dataflow.trace("job.Run", fn _span ->
+  Dataflow.Crash.capture(fn -> risky_work() end)
+end)
+
+# Top-level convenience (delegates to Dataflow.Crash.capture/1):
+Dataflow.capture(fn -> risky_work() end)
+```
+
+Without a current span the crash is recorded on a synthetic `exception`
+span, so crashes stay visible outside `Dataflow.trace/2`. Recording is
+best-effort (it can never mask the crash) and with `DATAFLOW_DISABLED=true`
+the wrapper disappears entirely: the function runs bare.
+
+For Plug routers, `use Dataflow.PlugCrash` (after `use Plug.Router`) wraps
+dispatch the same way: any handler crash is recorded on the request's span
+— plus the request line as `error.request` metadata — and re-raised, so
+Plug's normal error handling proceeds untouched.
+
+```elixir
+defmodule MyApp.Router do
+  use Plug.Router
+  use Dataflow.PlugCrash
+
+  plug :match
+  plug :dispatch
+  get "/orders" do
+    send_resp(conn, 200, "[]")
+  end
+end
+```
+
 ## Outgoing HTTP tracing
 
 `Dataflow.HTTP` is a thin wrapper around OTP's `:httpc` that turns every
