@@ -16,13 +16,15 @@ defmodule Dataflow do
         Dataflow.trace("schema.Check", fn s -> ... end)
       end)
       Dataflow.HTTP.get(url)                  # HTTP_CLIENT span + trace id header
+      Dataflow.info("shipped", %{"size" => n})  # log line joined to the current trace
+      Dataflow.attach_logger()                # forward Logger messages as logs
       Dataflow.capture(fn -> risky() end)     # crash → error.stack, then re-raise
   """
 
   use Application
   require Logger
 
-  @sdk_version "0.5.0"
+  @sdk_version "0.6.0"
   @key_len 32
   @salt_len 16
   @iterations 10_000
@@ -41,7 +43,7 @@ defmodule Dataflow do
         # starts; best-effort, independent of the tracing pipeline. The
         # whereis guard keeps it exactly-once across double starts.
         Dataflow.Manifest.send_manifest()
-        Supervisor.start_link([Dataflow.Pipeline], strategy: :one_for_one, name: Dataflow.Supervisor)
+        Supervisor.start_link([Dataflow.Pipeline, Dataflow.Logs], strategy: :one_for_one, name: Dataflow.Supervisor)
 
       _pid ->
         :ignore
@@ -190,6 +192,42 @@ defmodule Dataflow do
   with `use Dataflow.PlugCrash`. See `Dataflow.Crash`.
   """
   defdelegate capture(fun), to: Dataflow.Crash
+
+  # --- log capture ---------------------------------------------------------------
+
+  @doc """
+  Records an application log line at `level` ("debug"/"info"/"warn"/"error")
+  with the current span's trace/span ids and ships it batched to the REST
+  logs endpoint. Fields are stringified and capped at 50 entries.
+  Best-effort: never raises, no-op with the SDK disabled. See `Dataflow.Logs`.
+  """
+  defdelegate log(level, message, fields \\ %{}), to: Dataflow.Logs
+
+  @doc "Records a debug-level log line (see `log/3`)."
+  defdelegate debug(message, fields \\ %{}), to: Dataflow.Logs
+
+  @doc "Records an info-level log line (see `log/3`)."
+  defdelegate info(message, fields \\ %{}), to: Dataflow.Logs
+
+  @doc "Records a warn-level log line (see `log/3`)."
+  defdelegate warn(message, fields \\ %{}), to: Dataflow.Logs
+
+  @doc "Records an error-level log line (see `log/3`)."
+  defdelegate error(message, fields \\ %{}), to: Dataflow.Logs
+
+  @doc "Flushes buffered log lines now (best-effort; also useful before shutdown)."
+  defdelegate flush_logs(), to: Dataflow.Logs, as: :flush
+
+  @doc """
+  Installs the Erlang `:logger` handler that forwards `Logger` messages
+  into the same batched log pipeline (`warning` → `warn`, metadata →
+  fields where stringifiable). Returns `:ok`, or `{:error, :already_exists}`
+  when already attached.
+  """
+  defdelegate attach_logger(), to: Dataflow.Logs
+
+  @doc "Removes the handler installed by `attach_logger/0`."
+  defdelegate detach_logger(), to: Dataflow.Logs
 
   # --- optional integrations ---------------------------------------------------
 

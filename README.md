@@ -139,6 +139,40 @@ Spans join the caller's current trace when one exists (e.g. a Phoenix
 request span), otherwise they open their own. The handler is best-effort:
 it never raises into the query caller.
 
+## Log capture
+
+Application logs ship through the same configuration as spans, correlated
+with the current trace:
+
+```elixir
+Dataflow.info("cache warmed", %{"entries" => n}) # level, message, fields
+Dataflow.debug("detail")                         # debug/info/warn/error
+Dataflow.log("warn", "disk 90%", %{"pct" => 90})
+
+# Forward Elixir Logger messages into the same pipeline:
+Dataflow.attach_logger()                         # install once at boot
+Dataflow.detach_logger()                         # when needed
+```
+
+Every line becomes a wire entry of `timestamp` (unix ms), `level`,
+`message`, `trace_id`, `span_id`, `service_name` and `fields`. The
+trace/span ids come from the caller's current span (`Dataflow.trace/2`,
+`start_server_span/2`), so logs land on the trace that produced them.
+Fields — and Logger metadata, for the handler — are stringified and
+capped at 50 entries; levels normalize to `debug`/`info`/`warn`/`error`
+(Logger's `warning` maps to `warn`, `critical`/`alert`/`emergency` to
+`error`).
+
+Delivery is batched and best-effort: a background flusher posts to
+`POST {base}/api/v1/logs` every 500 ms, or as soon as 50 lines are
+buffered — at most 1000 entries per batch, `x-api-key` auth, 5 s timeout,
+one retry then drop. The buffer holds 1024 entries and drops the oldest on
+overflow. The base URL resolves like the manifest's (`DATAFLOW_HTTP_URL`,
+else the URL-form `DATAFLOW_ENDPOINT`); a bare `host:port` endpoint has no
+derivable HTTP base and log shipping stays off. With
+`DATAFLOW_DISABLED=true` every entry point is a no-op, and logging never
+raises into the caller.
+
 ## Route scanning
 
 `Dataflow.Scan` is a static scanner for CI / release pipelines: it extracts
