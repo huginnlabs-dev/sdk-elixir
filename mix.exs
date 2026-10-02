@@ -4,7 +4,7 @@ defmodule Dataflow.MixProject do
   def project do
     [
       app: :dataflow,
-      version: "0.6.0",
+      version: "0.8.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: [{:telemetry, "~> 1.0"}]
@@ -13,7 +13,7 @@ defmodule Dataflow.MixProject do
 
   # The SDK rides on OTP built-ins (:httpc, AES-GCM/PBKDF2 with :crypto,
   # JSON with Elixir 1.18+); :telemetry is the single hex dep, needed for
-  # the Ecto query tracer.
+  # the Ecto and Oban tracers.
   def application do
     [extra_applications: [:logger, :inets, :ssl, :crypto], mod: {Dataflow, []}]
   end

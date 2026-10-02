@@ -7,7 +7,7 @@ trace on the BEAM; a background pipeline batches completed events and
 delivers them with ack-based replay.
 
 Requires Elixir ~> 1.18. The only hex dependency is `:telemetry` (for the
-Ecto tracer); HTTP uses OTP's built-in `:httpc`, crypto uses `:crypto`,
+Ecto and Oban tracers); HTTP uses OTP's built-in `:httpc`, crypto uses `:crypto`,
 JSON is Elixir 1.18+'s built-in.
 
 ## Setup
@@ -138,6 +138,31 @@ span:
 Spans join the caller's current trace when one exists (e.g. a Phoenix
 request span), otherwise they open their own. The handler is best-effort:
 it never raises into the query caller.
+
+## Oban jobs
+
+Attach once at boot (application start / release hook):
+
+```elixir
+Dataflow.attach_oban()                  # listens on [:oban, :job, :start/:stop/:exception]
+Dataflow.attach_oban([:my, :prefix])    # match your Oban telemetry prefix
+Dataflow.detach_oban()                  # when needed
+```
+
+Every Oban job lifecycle becomes one `FUNCTION_CALL` span (the `:start`
+event opens it, the `:stop`/`:exception` event closes it):
+
+- name `oban.<worker>` — the worker module from the job map;
+- `oban.queue` and `oban.attempt` in metadata — job args are never
+  captured (they may carry end-user data);
+- duration from the stop/exception measurements;
+- failures (the `:exception` event) marked status 500 with the formatted
+  error (truncated to 500 chars) and the stacktrace capped at 8192 bytes
+  as the `error.stack` metadata entry.
+
+Spans join the caller's current trace when one exists, otherwise they
+open their own. The handler is best-effort: it never raises into the job
+process, and with `DATAFLOW_DISABLED=true` it is a no-op.
 
 ## Log capture
 

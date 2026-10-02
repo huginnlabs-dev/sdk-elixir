@@ -11,6 +11,7 @@ defmodule Dataflow do
 
       Dataflow.configure()
       Dataflow.attach_ecto()                  # DB_QUERY spans for Ecto repos
+      Dataflow.attach_oban()                  # FUNCTION_CALL spans for Oban jobs
       Dataflow.trace("ingest.Validate", fn span ->
         Dataflow.Span.data(span, "event_id", ev.id)
         Dataflow.trace("schema.Check", fn s -> ... end)
@@ -24,7 +25,7 @@ defmodule Dataflow do
   use Application
   require Logger
 
-  @sdk_version "0.6.0"
+  @sdk_version "0.8.0"
   @key_len 32
   @salt_len 16
   @iterations 10_000
@@ -241,6 +242,17 @@ defmodule Dataflow do
 
   @doc "Detaches the Ecto query tracer installed by `attach_ecto/1`."
   def detach_ecto(prefix \\ [:dataflow_sample]), do: Dataflow.Ecto.detach(prefix)
+
+  @doc """
+  Attaches the Oban job tracer: every `[:<prefix>, :job, :start | :stop |
+  :exception]` telemetry event becomes a FUNCTION_CALL span (see
+  `Dataflow.Oban`). Returns `:ok`, or `{:error, :already_exists}` when the
+  same prefix is already attached.
+  """
+  def attach_oban(prefix \\ [:oban]), do: Dataflow.Oban.attach(prefix)
+
+  @doc "Detaches the Oban job tracer installed by `attach_oban/1`."
+  def detach_oban(prefix \\ [:oban]), do: Dataflow.Oban.detach(prefix)
 
   defp agent_attrs do
     arch =
