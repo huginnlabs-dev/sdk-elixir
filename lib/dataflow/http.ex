@@ -64,7 +64,7 @@ defmodule Dataflow.HTTP do
 
     headers =
       [{@trace_header, span.trace_id} | headers]
-      |> Enum.map(fn {k, v} -> {String.downcase(to_string(k)), String.to_charlist(to_string(v))} end)
+      |> Enum.map(fn {k, v} -> {String.to_charlist(String.downcase(to_string(k))), String.to_charlist(to_string(v))} end)
 
     case raw_request_with_headers(method, url, headers, body, opts) do
       {:ok, status, resp_headers, resp_body} ->
@@ -114,22 +114,29 @@ defmodule Dataflow.HTTP do
   # --- span derivation (pure, unit-tested) ------------------------------------
 
   @doc false
-  # "GET api.example.com/v1/orders" — method, host and path, like the Go SDK.
+  # "GET api.example.com:8080/v1/orders" — method, authority (port kept
+  # when explicit, like host/1) and path, like the Go SDK.
   def span_name(method, url) do
     uri = URI.parse(url)
-    "#{String.upcase(to_string(method))} #{uri.host || ""}#{uri.path || ""}"
+    "#{String.upcase(to_string(method))} #{host(url)}#{uri.path || ""}"
   end
 
   @doc false
-  # Authority part of the URL (host, with the port when explicitly present)
-  # — the span's callee_package. Unparseable URLs yield "".
+  # Authority part of the URL (host, with the port when explicitly present
+  # — i.e. differing from the scheme default) — the span's callee_package.
+  # Unparseable URLs yield "".
   def host(url) do
     case URI.parse(url) do
       %URI{host: nil} -> ""
       %URI{host: host, port: nil} -> host
-      %URI{host: host, port: port} -> "#{host}:#{port}"
+      %URI{host: host, port: port, scheme: scheme} ->
+        if port == default_port(scheme), do: host, else: "#{host}:#{port}"
     end
   end
+
+  defp default_port("http"), do: 80
+  defp default_port("https"), do: 443
+  defp default_port(_), do: nil
 
   defp opt(opts, key, fallback) do
     case Keyword.fetch(opts, key) do

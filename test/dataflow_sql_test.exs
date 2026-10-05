@@ -31,7 +31,7 @@ defmodule Dataflow.SQLTest do
     end
 
     test "quoted table name loses its quotes" do
-      assert Dataflow.SQL.summary(~s(INSERT INTO "users" (name) VALUES ($1))) == "INSERT users"
+      assert Dataflow.SQL.summary(~s{INSERT INTO "users" (name) VALUES ($1)}) == "INSERT users"
     end
 
     test "multi-line statements are whitespace-normalized" do

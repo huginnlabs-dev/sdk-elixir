@@ -135,7 +135,14 @@ defmodule Dataflow.Oban do
 
   # Only the worker name, queue and attempt travel as fields; the args map
   # may carry end-user data and is never read.
-  defp worker_name(%{worker: worker}) when is_atom(worker) and worker != nil, do: Atom.to_string(worker)
+  # Atom.to_string/1 renders "Elixir.MyApp.Worker" on recent OTP — keep
+  # the bare module path the dashboard expects.
+  defp worker_name(%{worker: worker}) when is_atom(worker) and worker != nil do
+    case Atom.to_string(worker) do
+      "Elixir." <> rest -> rest
+      name -> name
+    end
+  end
   defp worker_name(%{worker: worker}) when is_binary(worker), do: worker
   defp worker_name(_job), do: "unknown"
 

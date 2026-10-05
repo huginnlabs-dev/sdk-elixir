@@ -65,8 +65,8 @@ defmodule Dataflow.CrashTest do
     end
 
     test "format_error/3 renders throws and exits" do
-      assert Dataflow.Crash.format_error(:throw, {:custom, :throw}, []) =~ "uncaught throw"
-      assert Dataflow.Crash.format_error(:exit, :shutdown, []) =~ ":shutdown"
+      assert Dataflow.Crash.format_error(:throw, {:custom, :throw}, []) =~ "** (throw)"
+      assert Dataflow.Crash.format_error(:exit, :shutdown, []) =~ "** (exit) shutdown"
     end
 
     test "clip_stack/1 caps the formatted trace at 8192 bytes, keeping the top" do
@@ -144,8 +144,8 @@ defmodule Dataflow.CrashTest do
 
       assert event["name"] == "thrown.Op"
       assert event["status_code"] == 500
-      assert event["error_message"] =~ "uncaught throw"
-      assert event["error_message"] =~ ":shutdown"
+      assert event["error_message"] =~ "** (throw)"
+      assert event["error_message"] =~ "** (exit)"
     end
 
     test "records a synthetic exception span when no span is current" do
@@ -244,17 +244,22 @@ defmodule Dataflow.CrashTest do
   end
 
   # Swaps the real Pipeline for a recorder so the emitted JSON events are
-  # observable without a server; the supervised child is restored after.
+  # observable without a server. The SDK tree is stopped whole — child-pid
+  # termination is unreliable across OTP releases — and restarted after.
   defp with_recorder(fun) do
-    pid = Process.whereis(Dataflow.Pipeline)
-    :ok = Supervisor.terminate_child(Dataflow.Supervisor, pid)
+    case Process.whereis(Dataflow.Supervisor) do
+      nil -> :ok
+      sup -> Supervisor.stop(sup)
+    end
+
     {:ok, recorder} = EventRecorder.start_link(self())
 
     try do
       fun.()
     after
-      GenServer.stop(recorder)
-      {:ok, _pid} = Supervisor.restart_child(Dataflow.Supervisor, Dataflow.Pipeline)
+      if Process.alive?(recorder), do: GenServer.stop(recorder)
+      Dataflow.start(:normal, [])
+      Dataflow.clear_context()
     end
   end
 end

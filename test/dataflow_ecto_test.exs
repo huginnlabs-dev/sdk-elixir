@@ -184,17 +184,22 @@ defmodule Dataflow.EctoTest do
   end
 
   # Swaps the real Pipeline for a recorder so the emitted JSON events are
-  # observable without a server; the supervised child is restored after.
+  # observable without a server. The SDK tree is stopped whole — child-pid
+  # termination is unreliable across OTP releases — and restarted after.
   defp with_recorder(fun) do
-    pid = Process.whereis(Dataflow.Pipeline)
-    :ok = Supervisor.terminate_child(Dataflow.Supervisor, pid)
+    case Process.whereis(Dataflow.Supervisor) do
+      nil -> :ok
+      sup -> Supervisor.stop(sup)
+    end
+
     {:ok, recorder} = EventRecorder.start_link(self())
 
     try do
       fun.()
     after
-      GenServer.stop(recorder)
-      {:ok, _pid} = Supervisor.restart_child(Dataflow.Supervisor, Dataflow.Pipeline)
+      if Process.alive?(recorder), do: GenServer.stop(recorder)
+      Dataflow.start(:normal, [])
+      Dataflow.clear_context()
     end
   end
 

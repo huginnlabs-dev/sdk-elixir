@@ -51,7 +51,9 @@ defmodule Dataflow.Pipeline do
     cap = settings(:buffer_size, 10_000)
 
     if :queue.len(q) > cap do
-      {{_, q}, _} = :queue.out(q)
+      # :queue.out returns {{:value, item}, rest} — keep the REST queue,
+      # not the popped event (a binary would poison :queue.in forever).
+      {{:value, _dropped}, q} = :queue.out(q)
       %{state | buffer: q, base: base + 1}
     else
       %{state | buffer: q}

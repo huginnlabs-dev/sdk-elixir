@@ -2,6 +2,7 @@ defmodule Dataflow.HTTPTest do
   use ExUnit.Case, async: false
 
   alias Dataflow.HTTP
+  alias __MODULE__.EchoServer
 
   setup_all do
     {:ok, _} = Application.ensure_all_started(:inets)

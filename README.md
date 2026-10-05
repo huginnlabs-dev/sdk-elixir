@@ -234,8 +234,24 @@ raises into the caller.
 The runtime overhead of every Dataflow SDK is measured with a uniform
 benchmark: the same ~1 ms CPU-bound HTTP endpoint in three configs (no
 instrumentation / Dataflow SDK / OpenTelemetry), one shared load driver,
-spans exported live. Methodology, current numbers and reproduction steps:
-Numbers are published in each SDK README as they are measured; the full harness lives in the Dataflow monorepo `bench/`.
+spans exported live. Numbers are published in each SDK README as they are
+measured; the full harness lives in the Dataflow monorepo `bench/`.
 
-Numbers for this SDK: **queued** — the harness follows the same contract
-and will land here.
+Measured for this SDK (0.8.1, dockerized Elixir 1.18/OTP 28, Bandit on
+4 vCPU, driver c=16 for 60 s, two rounds, spans exported live to a local
+Dataflow server):
+
+| Config | Throughput | p50 | p95 | p99 |
+|--------|-----------|-----|-----|-----|
+| Baseline (Plug/Bandit) | 8 835–8 845 rps | 1.67 ms | 2.33 ms | 2.78 ms |
+| + Dataflow SDK | 7 719–7 806 rps (**≈ −12%**) | 2.05 ms | 2.76 ms | 3.68 ms |
+| + OpenTelemetry | 8 445–8 479 rps (≈ −4%) | 1.74 ms | 2.57 ms | 3.03 ms |
+
+At ~8k rps both instrumented configs exceed their default export path:
+the SDK's replay buffer (flush of 500 events per 300 ms ≈ 1.7k spans/s)
+recycles oldest-first, and OTEL's default batch processor (queue 2048)
+drops similarly. The measured throughput cost therefore includes that
+overload churn; on unsaturated loads the SDK's per-request work (one span
+build + JSON encode + async cast) is the only adder. The SDK was also
+re-run after fixing a Pipeline crash found by this benchmark (buffer
+overflow crashed the flush GenServer — fixed in 0.8.1).
