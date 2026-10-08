@@ -1,4 +1,11 @@
+<div align="center">
+
+  <img src="assets/mark.svg" width="72" alt="Dataflow mark" />
+
 # Dataflow Elixir SDK
+
+</div>
+
 
 HuginnLabs Dataflow tracing for Elixir/Erlang services: runtime spans with
 E2E-encrypted payloads, shipped over the REST ingest API. Spans ride the
